@@ -343,7 +343,7 @@ canvas#scene{position:fixed;inset:0;z-index:1;touch-action:none}
     camera.aspect = w/h; camera.updateProjectionMatrix();
     var mobile = w < 900;
     hero.position.set(mobile ? 0 : 0.35, mobile ? -0.05 : -0.15, 0);
-    baseFit = mobile ? Math.min(1.1, w/h*2.0) : 1.3;
+    baseFit = mobile ? Math.min(0.85, w/h*1.6) : 1.3;
   }
   var baseFit = 1;
   window.addEventListener('resize', layout); layout();
