@@ -146,7 +146,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
   <main class="relative max-w-3xl mx-auto px-4 sm:px-5 -mt-10 sm:-mt-12">
 
     <!-- 진행 단계 -->
-    <ol id="stepper" class="card flex items-start justify-between px-5 sm:px-8 py-4 mb-4" aria-label="주문 진행 단계">
+    <ol id="stepper" hidden style="display:none" class="card flex items-start justify-between px-5 sm:px-8 py-4 mb-4" aria-label="주문 진행 단계">
       <li class="step active flex flex-col items-center gap-1.5" data-step="1"><span class="step-dot">1</span><span class="step-label">상품 선택</span></li>
       <li class="step-line" data-line="1"></li>
       <li class="step flex flex-col items-center gap-1.5" data-step="2"><span class="step-dot">2</span><span class="step-label">수령 방법</span></li>
@@ -269,6 +269,10 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
         <div>
           <label class="label" for="userAddress">배송(또는 방문) 주소</label>
           <input id="userAddress" type="text" autocomplete="street-address" placeholder="받으실 주소" class="field">
+        </div>
+        <div>
+          <label class="label" for="userMemo">메모 <span class="text-slate-400 font-normal">(선택)</span></label>
+          <textarea id="userMemo" rows="2" maxlength="300" placeholder="요청사항이 있으면 적어주세요. 예) 부재 시 문 앞에 놓아주세요" class="field" style="height:auto;min-height:72px;padding-top:12px;padding-bottom:12px;resize:vertical"></textarea>
         </div>
       </div>
 
@@ -535,6 +539,7 @@ function buildOrderData(){
     name: document.getElementById('userName').value.trim(),
     phone: document.getElementById('userPhone').value.trim(),
     address: document.getElementById('userAddress').value.trim(),
+    memo: document.getElementById('userMemo').value.trim().slice(0, 300),
     hp: document.getElementById('hpField').value,
     formTime: Date.now() - PAGE_LOADED_AT
   };
@@ -595,7 +600,7 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
     const slip = document.getElementById('paySlip');
     slip.classList.remove('hidden');
     slip.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    ['userName','userPhone','userAddress'].forEach(id=>{ document.getElementById(id).value=''; });
+    ['userName','userPhone','userAddress','userMemo'].forEach(id=>{ document.getElementById(id).value=''; });
     document.getElementById('agreePrivacy').checked = false;
     Object.keys(cartQty).forEach(k=>cartQty[k]=0);
     document.querySelectorAll('#productCards .product-card').forEach(card=>{
