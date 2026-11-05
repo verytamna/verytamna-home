@@ -248,3 +248,5 @@ footer{background:#141B2D;color:rgba(255,255,255,.6);padding:80px 0 50px;font-si
   .f-links{gap:40px}
   .v-list li{grid-template-columns:84px 1fr}
 }
+
+.sale-notice{text-align:center;font-weight:700;margin:28px 0 -8px}

@@ -38,6 +38,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--mist);color:#211E33;
 .view{display:none;}
 .view.active{display:block;}
 #orderView.active{padding-bottom:112px;}
+#orderView.active.no-dock{padding-bottom:0;}
 
 /* 상단 브랜드 배너 */
 .band{
@@ -80,6 +81,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--mist);color:#211E33;
 .product-card.on,.delivery-btn.on{border-color:var(--deep);box-shadow:0 0 0 4px rgba(232,169,75,.20),0 10px 24px -12px rgba(35,31,61,.35);}
 .delivery-btn.on{background:var(--mist);}
 .step-btn{width:44px;height:44px;font-size:20px;}
+.product-card.sold-out{opacity:.55;background:#f8fafc;}
+.product-card.sold-out .js-price{color:#64748b;}
+.product-card.sold-out .js-price + span{display:none;}
+.product-card.sold-out .step-btn{cursor:not-allowed;}
 
 /* 입력 */
 .field{width:100%;padding:14px 16px;border-radius:14px;border:1px solid rgba(91,75,138,.22);background:#fff;font-size:15px;}
@@ -132,8 +137,8 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
       </div>
 
       <div class="pt-5 pb-16 sm:pb-20">
-        <h1 data-in class="font-display text-[30px] sm:text-[40px] leading-[1.2] break-keep mb-2">알 크기를 고르고,<br class="sm:hidden"> <span class="text-[var(--dawn)]">바로 주문</span>하세요</h1>
-        <p data-in class="text-sm text-white/75 mb-5">오늘 새벽에 딴 블루베리, 그대로 보내드려요.</p>
+        <h1 id="heroTitle" style="visibility:hidden" data-in class="font-display text-[30px] sm:text-[40px] leading-[1.2] break-keep mb-2">알 크기를 고르고,<br class="sm:hidden"> <span class="text-[var(--dawn)]">바로 주문</span>하세요</h1>
+        <p id="heroSub" style="visibility:hidden" data-in class="text-sm text-white/75 mb-5">오늘 새벽에 딴 블루베리, 그대로 보내드려요.</p>
         <div data-in class="flex flex-wrap gap-2">
           <span class="glass rounded-full px-3 py-1.5 text-xs font-medium text-white/90"><i class="fa-solid fa-certificate text-[var(--dawn)] mr-1.5"></i>GAP 인증 제1028104호</span>
           <span class="glass rounded-full px-3 py-1.5 text-xs font-medium text-white/90"><i class="fa-solid fa-sun text-[var(--dawn)] mr-1.5"></i>당일 새벽 수확</span>
@@ -154,6 +159,55 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
       <li class="step flex flex-col items-center gap-1.5" data-step="3"><span class="step-dot">3</span><span class="step-label">주문자 정보</span></li>
     </ol>
 
+    <!-- 판매 정보 확인 중 -->
+    <section id="saleLoading" class="card p-8 mb-4 text-center text-sm text-slate-500">
+      <i class="fa-solid fa-spinner fa-spin text-[var(--mid)] mr-1.5"></i> 판매 정보를 확인하고 있어요.
+    </section>
+
+    <!-- 판매 정보를 못 불러왔을 때 -->
+    <section id="saleError" hidden class="card p-7 sm:p-9 mb-4 text-center">
+      <h2 class="font-display text-2xl text-[var(--deep)] mb-2">판매 정보를 불러오지 못했어요</h2>
+      <p class="text-sm text-slate-600 leading-relaxed mb-5">인터넷 연결을 확인하고 다시 시도해 주세요.<br>계속 안 되면 전화로 주문해 주세요.</p>
+      <div class="flex flex-col sm:flex-row gap-2 justify-center">
+        <button type="button" id="btnRetrySale" class="amber-btn h-12 px-6 rounded-xl font-bold">다시 시도</button>
+        <a href="tel:01025606099" class="h-12 px-6 rounded-xl font-bold border border-[var(--mid)]/25 text-[var(--deep)] flex items-center justify-center">010-2560-6099</a>
+      </div>
+    </section>
+
+    <!-- 비수확철 안내 (문구는 구글 시트 "설정" 탭에서 관리) -->
+    <section id="saleClosed" hidden class="card p-7 sm:p-9 mb-4">
+      <div class="text-center">
+        <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-[var(--mist)] flex items-center justify-center text-[var(--mid)] text-xl"><i class="fa-solid fa-seedling"></i></div>
+        <h2 id="closedTitle" class="font-display text-2xl sm:text-3xl text-[var(--deep)] mb-3 break-keep"></h2>
+        <p id="closedMessage" class="text-sm text-slate-600 leading-relaxed break-keep" style="white-space:pre-line"></p>
+        <p id="closedNext" style="display:none" class="inline-block mt-4 rounded-full bg-[var(--mist)] px-4 py-2 text-sm font-bold text-[var(--deep)]"></p>
+      </div>
+
+      <div class="mt-7 pt-6 border-t border-[var(--mid)]/10">
+        <h3 class="font-bold text-[var(--deep)] mb-1">수확이 시작되면 문자로 알려드릴게요</h3>
+        <p class="text-xs text-slate-500 mb-4">성함과 연락처를 남겨 주세요.</p>
+        <div id="notifyForm" class="space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><label class="label" for="notifyName">성함</label><input id="notifyName" type="text" autocomplete="name" maxlength="40" class="field"></div>
+            <div><label class="label" for="notifyPhone">연락처</label><input id="notifyPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" class="field"></div>
+          </div>
+          <div class="rounded-xl border border-[var(--mid)]/15 bg-[var(--mist)] p-3.5 text-xs text-slate-600 leading-relaxed">
+            <p>· <b>수집 항목</b> : 성함, 연락처 · <b>이용 목적</b> : 판매 시작 안내 문자 발송</p>
+            <p>· <b>보유·이용 기간</b> : 안내 발송 후 지체 없이 파기 · 문의 : 010-2560-6099</p>
+            <p>· 동의를 거부하실 수 있으나, 미동의 시 알림 신청이 불가합니다.</p>
+            <label class="mt-2 flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" id="notifyAgree" class="mt-0.5 shrink-0 w-4 h-4">
+              <span>위 개인정보 수집·이용에 동의합니다.</span>
+            </label>
+          </div>
+          <p id="notifyMsg" hidden class="text-sm text-red-600" role="alert"></p>
+          <button type="button" id="btnNotify" class="amber-btn w-full h-12 rounded-xl font-bold">수확 알림 신청하기</button>
+        </div>
+        <p id="notifyDone" hidden class="rounded-xl bg-[var(--mist)] p-4 text-sm font-bold text-[var(--deep)] text-center"><i class="fa-solid fa-circle-check text-[var(--leaf)] mr-1.5"></i>신청됐어요. 수확이 시작되면 문자로 알려드릴게요.</p>
+      </div>
+    </section>
+
+    <div id="orderForm" hidden>
     <!-- 1. 상품 선택 -->
     <section class="card p-5 sm:p-7 mb-4">
       <h2 class="font-display text-xl text-[var(--deep)] mb-1">1. 상품 선택</h2>
@@ -167,11 +221,11 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
               <div class="sm:hidden flex items-baseline flex-wrap gap-x-1.5">
                 <span class="font-bold text-base text-[var(--deep)]">왕특</span>
                 <span class="text-xs text-slate-500">18mm 이상</span>
-                <span class="font-black text-sm text-[var(--mid)]">45,000원<span class="text-[9px] font-normal text-slate-500">/kg</span></span>
+                <span class="font-black text-sm text-[var(--mid)]"><span class="js-price" data-grade="왕특">39,000원</span><span class="text-[9px] font-normal text-slate-500">/kg</span></span>
               </div>
               <div class="hidden sm:block">
                 <div class="font-bold text-base text-[var(--deep)]">왕특 <span class="font-normal text-xs text-slate-500">18mm 이상</span></div>
-                <div class="text-sm font-black text-[var(--mid)] mt-0.5">45,000원<span class="text-[10px] font-normal text-slate-500">/kg</span></div>
+                <div class="text-sm font-black text-[var(--mid)] mt-0.5"><span class="js-price" data-grade="왕특">39,000원</span><span class="text-[10px] font-normal text-slate-500">/kg</span></div>
               </div>
             </div>
           </div>
@@ -189,11 +243,11 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
               <div class="sm:hidden flex items-baseline flex-wrap gap-x-1.5">
                 <span class="font-bold text-base text-[var(--deep)]">특대</span>
                 <span class="text-xs text-slate-500">16mm~18mm</span>
-                <span class="font-black text-sm text-[var(--mid)]">40,000원<span class="text-[9px] font-normal text-slate-500">/kg</span></span>
+                <span class="font-black text-sm text-[var(--mid)]"><span class="js-price" data-grade="특대">35,000원</span><span class="text-[9px] font-normal text-slate-500">/kg</span></span>
               </div>
               <div class="hidden sm:block">
                 <div class="font-bold text-base text-[var(--deep)]">특대 <span class="font-normal text-xs text-slate-500">16mm~18mm</span></div>
-                <div class="text-sm font-black text-[var(--mid)] mt-0.5">40,000원<span class="text-[10px] font-normal text-slate-500">/kg</span></div>
+                <div class="text-sm font-black text-[var(--mid)] mt-0.5"><span class="js-price" data-grade="특대">35,000원</span><span class="text-[10px] font-normal text-slate-500">/kg</span></div>
               </div>
             </div>
           </div>
@@ -211,11 +265,11 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
               <div class="sm:hidden flex items-baseline flex-wrap gap-x-1.5">
                 <span class="font-bold text-base text-[var(--deep)]">대</span>
                 <span class="text-xs text-slate-500">14mm~16mm</span>
-                <span class="font-black text-sm text-[var(--mid)]">35,000원<span class="text-[9px] font-normal text-slate-500">/kg</span></span>
+                <span class="font-black text-sm text-[var(--mid)]"><span class="js-price" data-grade="대">29,000원</span><span class="text-[9px] font-normal text-slate-500">/kg</span></span>
               </div>
               <div class="hidden sm:block">
                 <div class="font-bold text-base text-[var(--deep)]">대 <span class="font-normal text-xs text-slate-500">14mm~16mm</span></div>
-                <div class="text-sm font-black text-[var(--mid)] mt-0.5">35,000원<span class="text-[10px] font-normal text-slate-500">/kg</span></div>
+                <div class="text-sm font-black text-[var(--mid)] mt-0.5"><span class="js-price" data-grade="대">29,000원</span><span class="text-[10px] font-normal text-slate-500">/kg</span></div>
               </div>
             </div>
           </div>
@@ -239,7 +293,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
         </button>
         <button type="button" data-method="택배" class="delivery-btn text-left rounded-xl p-4 min-h-[64px]">
           <div class="font-bold text-sm text-[var(--deep)] mb-0.5">택배 배송</div>
-          <div class="text-xs text-slate-500">5,000원 (4kg↑ 무료)</div>
+          <div id="shipNote" class="text-xs text-slate-500">5,000원 (4kg↑ 무료)</div>
         </button>
       </div>
 
@@ -326,6 +380,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
         </div>
       </div>
     </section>
+    </div>
 
     <!-- 후기 -->
     <section class="py-8">
@@ -349,7 +404,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
   </footer>
 
   <!-- 하단 고정 주문 바 -->
-  <div class="dock">
+  <div class="dock" id="orderDock" hidden>
     <div class="max-w-3xl mx-auto px-4 sm:px-5 py-3 flex items-center justify-between gap-4">
       <div class="leading-tight">
         <div class="text-[11px] text-white/70">총 결제금액</div>
@@ -448,19 +503,21 @@ window.addEventListener('popstate', function(e){
 })();
 
 // ── 장바구니 / 진행 단계 ──
-const priceMap = { 왕특: 45000, 특대: 40000, 대: 35000 };
+// 가격·택배비의 원본은 구글 시트 "설정" 탭이고, applySaleConfig()가 덮어쓴다.
+const priceMap = { 왕특: 39000, 특대: 35000, 대: 29000 };
+const soldOutMap = { 왕특: false, 특대: false, 대: false };
 const cartQty = { 왕특: 0, 특대: 0, 대: 0 };
 let deliveryMethod = null;
-const SHIPPING_FEE = 5000, FREE_SHIPPING_MIN_QTY = 4;
+let shippingFeeAmount = 5000, freeShippingMinQty = 4;
 
 function getItems(){ return Object.keys(cartQty).filter(k=>cartQty[k]>0).map(k=>({name:k, qty:cartQty[k], subtotal:priceMap[k]*cartQty[k]})); }
 function getTotalQty(){ return Object.values(cartQty).reduce((a,b)=>a+b,0); }
-function getShippingFee(){ return deliveryMethod !== '택배' ? 0 : (getTotalQty() >= FREE_SHIPPING_MIN_QTY ? 0 : SHIPPING_FEE); }
+function getShippingFee(){ return deliveryMethod !== '택배' ? 0 : (getTotalQty() >= freeShippingMinQty ? 0 : shippingFeeAmount); }
 
 document.querySelectorAll('#productCards .product-card').forEach(card=>{
   const key = card.dataset.key, valEl = card.querySelector('.qtyVal');
   card.querySelector('.qtyMinus').addEventListener('click', ()=>{ cartQty[key] = Math.max(0, cartQty[key]-2); valEl.textContent = cartQty[key]; update(); });
-  card.querySelector('.qtyPlus').addEventListener('click', ()=>{ cartQty[key] = Math.min(50, cartQty[key]+2); valEl.textContent = cartQty[key]; update(); });
+  card.querySelector('.qtyPlus').addEventListener('click', ()=>{ if(soldOutMap[key]) return; cartQty[key] = Math.min(50, cartQty[key]+2); valEl.textContent = cartQty[key]; update(); });
 });
 document.querySelectorAll('.delivery-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{ deliveryMethod = btn.dataset.method; update(); });
@@ -512,15 +569,128 @@ function update(){
   const ship = document.getElementById('shippingFeeLine');
   if(deliveryMethod === null) ship.textContent = '수령 방법을 선택해주세요';
   else if(deliveryMethod === '방문') ship.textContent = '없음 (방문 수령)';
-  else if(shipping === 0) ship.textContent = '무료 (4kg 이상)';
+  else if(shipping === 0) ship.textContent = '무료 (' + freeShippingMinQty + 'kg 이상)';
   else ship.textContent = shipping.toLocaleString() + '원';
   animateNumber(document.getElementById('totalPrice'), subtotal + shipping);
   updateSteps();
 }
 
-// ⚠️ 아래 SCRIPT_URL은 구글 앱스 스크립트 배포 URL(버전 8, 고정)입니다.
+// ⚠️ 아래 SCRIPT_URL은 구글 앱스 스크립트 배포 URL(새 버전을 배포해도 고정)입니다.
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzp5qsgoKn3804tUj1UseibUvTq7EC--GxkRj1P5iojoOHgHJjsn8tJh6J9JpUlNQo/exec';
 const PAGE_LOADED_AT = Date.now();
+
+// ── 판매 설정 (구글 시트 "설정" 탭) ──
+// 인앱 브라우저에서도 읽히도록 fetch 대신 <script> 태그(JSONP)로 받는다.
+function loadSaleConfig(){
+  return new Promise((resolve, reject)=>{
+    const cb = '__saleConfig' + Date.now() + Math.floor(Math.random()*10000);
+    const s = document.createElement('script');
+    let done = false;
+    const finish = (fn, v)=>{
+      if(done) return;
+      done = true;
+      clearTimeout(timer);
+      window[cb] = function(){};
+      s.remove();
+      fn(v);
+    };
+    const timer = setTimeout(()=>finish(reject, new Error('timeout')), 20000);
+    window[cb] = d => finish(resolve, d);
+    s.onerror = ()=>finish(reject, new Error('load failed'));
+    s.onload = ()=>setTimeout(()=>finish(reject, new Error('no data')), 0);
+    s.src = SCRIPT_URL + '?action=config&callback=' + cb + '&_=' + Date.now();
+    document.head.appendChild(s);
+  });
+}
+
+const HERO_OPEN = { title: document.getElementById('heroTitle').innerHTML, sub: document.getElementById('heroSub').textContent };
+function setSaleView(state){
+  document.getElementById('saleLoading').hidden = state !== 'loading';
+  document.getElementById('saleError').hidden = state !== 'error';
+  document.getElementById('saleClosed').hidden = state !== 'closed';
+  document.getElementById('orderForm').hidden = state !== 'open';
+  document.getElementById('orderDock').hidden = state !== 'open';
+  document.getElementById('orderView').classList.toggle('no-dock', state !== 'open');
+  if(state === 'loading') return;
+  const title = document.getElementById('heroTitle'), sub = document.getElementById('heroSub');
+  title.innerHTML = state === 'open' ? HERO_OPEN.title : '베리탐나 블루베리';
+  sub.textContent = state === 'open' ? HERO_OPEN.sub : '수확철에만, 당일 수확한 블루베리를 보내드려요.';
+  title.style.visibility = sub.style.visibility = 'visible';
+}
+
+// 가격·품절·택배비를 화면에 반영. 품절된 등급이 장바구니에 있으면 빼고 그 이름을 돌려준다.
+function applySaleConfig(c){
+  const removed = [];
+  Object.keys(priceMap).forEach(k=>{
+    priceMap[k] = c.prices[k];
+    soldOutMap[k] = !!c.soldOut[k];
+    if(soldOutMap[k] && cartQty[k] > 0){ cartQty[k] = 0; removed.push(k); }
+  });
+  shippingFeeAmount = c.shippingFee;
+  freeShippingMinQty = c.freeShippingMinQty;
+  document.querySelectorAll('.js-price').forEach(el=>{
+    const k = el.dataset.grade;
+    el.textContent = soldOutMap[k] ? '품절' : priceMap[k].toLocaleString() + '원';
+  });
+  document.querySelectorAll('#productCards .product-card').forEach(card=>{
+    const k = card.dataset.key;
+    card.classList.toggle('sold-out', soldOutMap[k]);
+    card.querySelector('.qtyVal').textContent = cartQty[k];
+    card.querySelector('.qtyMinus').disabled = soldOutMap[k];
+    card.querySelector('.qtyPlus').disabled = soldOutMap[k];
+  });
+  document.getElementById('shipNote').textContent = shippingFeeAmount.toLocaleString() + '원 (' + freeShippingMinQty + 'kg↑ 무료)';
+  update();
+  return removed;
+}
+
+function showClosed(c){
+  document.getElementById('closedTitle').textContent = c.title;
+  document.getElementById('closedMessage').textContent = c.message;
+  const next = document.getElementById('closedNext');
+  next.textContent = c.next;
+  next.style.display = c.next ? '' : 'none';
+  setSaleView('closed');
+}
+
+function initSale(){
+  setSaleView('loading');
+  loadSaleConfig().then(c=>{
+    if(!c || !c.ok) return setSaleView('error');
+    applySaleConfig(c);
+    if(c.open) setSaleView('open');
+    else showClosed(c);
+  }).catch(()=>setSaleView('error'));
+}
+document.getElementById('btnRetrySale').addEventListener('click', initSale);
+
+// ── 수확 알림 신청 ──
+document.getElementById('btnNotify').addEventListener('click', async ()=>{
+  const msg = document.getElementById('notifyMsg');
+  const name = document.getElementById('notifyName').value.trim();
+  const phone = document.getElementById('notifyPhone').value.trim();
+  const fail = t=>{ msg.textContent = t; msg.hidden = false; };
+  msg.hidden = true;
+  if(!name) return fail('성함을 입력해주세요.');
+  if(phone.replace(/\D/g,'').length < 9) return fail('연락처를 정확히 입력해주세요.');
+  if(!document.getElementById('notifyAgree').checked) return fail('개인정보 수집·이용에 동의해주세요.');
+  const btn = document.getElementById('btnNotify');
+  btn.disabled = true;
+  try{
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ type: 'notify', name, phone, hp: document.getElementById('hpField').value, formTime: Date.now() - PAGE_LOADED_AT })
+    });
+    document.getElementById('notifyForm').hidden = true;
+    document.getElementById('notifyDone').hidden = false;
+  }catch(e){
+    fail('신청 중 문제가 발생했어요. 전화로 문의 부탁드려요.');
+  }finally{
+    btn.disabled = false;
+  }
+});
 
 function buildOrderData(){
   const items = getItems();
@@ -585,6 +755,29 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
   label.textContent = '접수 중...';
 
   try{
+    // 주문서를 연 뒤 시트 설정이 바뀌었을 수 있으니 제출 직전에 다시 확인한다.
+    // no-cors라 서버의 거절 응답을 읽을 수 없으므로, 여기서 걸러야 잘못된 접수 안내가 나가지 않는다.
+    label.textContent = '확인 중...';
+    const latest = await loadSaleConfig();
+    if(!latest || !latest.ok) throw new Error('config');
+    if(!latest.open){
+      label.textContent = '주문서 제출하기';
+      applySaleConfig(latest);
+      showClosed(latest);
+      window.scrollTo(0,0);
+      return;
+    }
+    const removed = applySaleConfig(latest);
+    if(removed.length){
+      label.textContent = '주문서 제출하기';
+      return showStatus(removed.join(', ') + ' 등급이 방금 품절되어 뺐어요. 확인 후 다시 제출해주세요.');
+    }
+    if(buildOrderData().total !== order.total){
+      label.textContent = '주문서 제출하기';
+      return showStatus('가격이 변경되어 금액을 다시 계산했어요. 확인 후 다시 제출해주세요.');
+    }
+    label.textContent = '접수 중...';
+
     // Apps Script(/exec)는 응답을 content.googleusercontent.com으로 리다이렉트하는데,
     // 일부 모바일 인앱 브라우저(카카오톡·네이버 등)는 이 리다이렉트 응답을 읽지 못해
     // res.json()에서 실패한다. doPost는 리다이렉트 이전에 이미 시트에 기록을 마치므로,
@@ -617,6 +810,7 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
 });
 
 update();
+initSale();
 
 // ── 주문조회 ──
 const lookupStatusMsg = document.getElementById('lookupStatusMsg');

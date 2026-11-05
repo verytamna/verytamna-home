@@ -28,4 +28,27 @@
     document.querySelectorAll('.rv').forEach(function(el){el.classList.add('in')});
   }
 
+  // 가격·판매 상태는 구글 시트 "설정" 탭에서 읽어 온다. 못 읽으면 HTML에 적힌 값을 그대로 둔다.
+  if(document.querySelector('[data-grade]')){
+    window.__saleConfig=function(c){
+      if(!c||!c.ok)return;
+      document.querySelectorAll('[data-grade]').forEach(function(el){
+        var k=el.dataset.grade;
+        el.textContent=c.soldOut[k]?'품절':c.prices[k].toLocaleString('ko-KR')+'원';
+      });
+      document.getElementById('shipFee').textContent=c.shippingFee.toLocaleString('ko-KR')+'원';
+      document.getElementById('freeMin').textContent=c.freeShippingMinQty+'kg 이상';
+      if(!c.open){
+        var notice=document.getElementById('saleNotice');
+        notice.textContent=c.next?c.title+' · '+c.next:c.title;
+        notice.hidden=false;
+        notice.classList.add('in');
+        document.getElementById('orderCtaLabel').textContent='판매 안내 · 수확 알림 신청';
+      }
+    };
+    var s=document.createElement('script');
+    s.src='https://script.google.com/macros/s/AKfycbzp5qsgoKn3804tUj1UseibUvTq7EC--GxkRj1P5iojoOHgHJjsn8tJh6J9JpUlNQo/exec?action=config&callback=__saleConfig&_='+Date.now();
+    document.head.appendChild(s);
+  }
+
 })();

@@ -140,27 +140,28 @@
         <div class="grade">왕특</div>
         <div class="size">18mm 이상</div>
         <div class="dot-row"><i style="width:44px;height:44px"></i><i style="width:40px;height:40px"></i><i style="width:46px;height:46px"></i></div>
-        <div class="price">45,000원<small>/ kg</small></div>
+        <div class="price"><span data-grade="왕특">39,000원</span><small>/ kg</small></div>
       </div>
       <div class="pcard rv d1">
         <div class="grade">특대</div>
         <div class="size">16mm ~ 18mm</div>
         <div class="dot-row"><i style="width:36px;height:36px"></i><i style="width:33px;height:33px"></i><i style="width:38px;height:38px"></i><i style="width:34px;height:34px"></i></div>
-        <div class="price">40,000원<small>/ kg</small></div>
+        <div class="price"><span data-grade="특대">35,000원</span><small>/ kg</small></div>
       </div>
       <div class="pcard rv d2">
         <div class="grade">대</div>
         <div class="size">14mm ~ 16mm</div>
         <div class="dot-row"><i style="width:28px;height:28px"></i><i style="width:26px;height:26px"></i><i style="width:30px;height:30px"></i><i style="width:27px;height:27px"></i><i style="width:29px;height:29px"></i></div>
-        <div class="price">35,000원<small>/ kg</small></div>
+        <div class="price"><span data-grade="대">29,000원</span><small>/ kg</small></div>
       </div>
     </div>
     <div class="ship-note rv">
-      <div>택배비 <b>5,000원</b></div>
-      <div><b>4kg 이상</b> 무료배송</div>
+      <div>택배비 <b id="shipFee">5,000원</b></div>
+      <div><b id="freeMin">4kg 이상</b> 무료배송</div>
       <div>농원 <b>방문 수령</b> 가능</div>
     </div>
-    <div class="center rv"><a href="/order/" class="btn btn-navy">주문서 작성하기 <span class="arrow">→</span></a></div>
+    <p class="sale-notice rv" id="saleNotice" hidden></p>
+    <div class="center rv"><a href="/order/" class="btn btn-navy"><span id="orderCtaLabel">주문서 작성하기</span> <span class="arrow">→</span></a></div>
   </div>
 </section>
 
