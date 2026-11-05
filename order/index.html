@@ -172,6 +172,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
         <button type="button" id="btnRetrySale" class="amber-btn h-12 px-6 rounded-xl font-bold">다시 시도</button>
         <a href="tel:01025606099" class="h-12 px-6 rounded-xl font-bold border border-[var(--mid)]/25 text-[var(--deep)] flex items-center justify-center">010-2560-6099</a>
       </div>
+      <p id="saleErrorCode" class="mt-4 text-[11px] text-slate-400 break-all"></p>
     </section>
 
     <!-- 비수확철 안내 (문구는 구글 시트 "설정" 탭에서 관리) -->
@@ -580,8 +581,34 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzp5qsgoKn3804tUj1Us
 const PAGE_LOADED_AT = Date.now();
 
 // ── 판매 설정 (구글 시트 "설정" 탭) ──
-// 인앱 브라우저에서도 읽히도록 fetch 대신 <script> 태그(JSONP)로 받는다.
+// 두 방법으로 동시에 요청해 먼저 온 값을 쓴다.
+// <script> 태그는 구글 로그인 쿠키가 함께 가서 로그인된 브라우저에서 실패할 수 있고,
+// fetch는 쿠키 없이 가지만 일부 인앱 브라우저에서 리다이렉트 응답을 읽지 못한다.
 function loadSaleConfig(){
+  return new Promise((resolve, reject)=>{
+    const errors = [];
+    const fail = name => e => {
+      errors.push(name + ':' + ((e && e.message) || e));
+      if(errors.length === 2) reject(new Error(errors.join(' / ')));
+    };
+    loadSaleConfigByFetch().then(resolve, fail('f'));
+    loadSaleConfigByScript().then(resolve, fail('s'));
+  });
+}
+function loadSaleConfigByFetch(){
+  return new Promise((resolve, reject)=>{
+    const timer = setTimeout(()=>reject(new Error('timeout')), 20000);
+    fetch(SCRIPT_URL + '?action=config&_=' + Date.now(), { credentials: 'omit' })
+      .then(r=>r.json())
+      .then(d=>{
+        clearTimeout(timer);
+        if(d && typeof d.ok === 'boolean') resolve(d);
+        else reject(new Error('bad data'));
+      })
+      .catch(e=>{ clearTimeout(timer); reject(e); });
+  });
+}
+function loadSaleConfigByScript(){
   return new Promise((resolve, reject)=>{
     const cb = '__saleConfig' + Date.now() + Math.floor(Math.random()*10000);
     const s = document.createElement('script');
@@ -660,7 +687,10 @@ function initSale(){
     applySaleConfig(c);
     if(c.open) setSaleView('open');
     else showClosed(c);
-  }).catch(()=>setSaleView('error'));
+  }).catch(e=>{
+    document.getElementById('saleErrorCode').textContent = String((e && e.message) || e).slice(0, 120);
+    setSaleView('error');
+  });
 }
 document.getElementById('btnRetrySale').addEventListener('click', initSale);
 

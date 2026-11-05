@@ -46,9 +46,12 @@
         document.getElementById('orderCtaLabel').textContent='판매 안내 · 수확 알림 신청';
       }
     };
-    var s=document.createElement('script');
-    s.src='https://script.google.com/macros/s/AKfycbzp5qsgoKn3804tUj1UseibUvTq7EC--GxkRj1P5iojoOHgHJjsn8tJh6J9JpUlNQo/exec?action=config&callback=__saleConfig&_='+Date.now();
-    document.head.appendChild(s);
+    var url='https://script.google.com/macros/s/AKfycbzp5qsgoKn3804tUj1UseibUvTq7EC--GxkRj1P5iojoOHgHJjsn8tJh6J9JpUlNQo/exec?action=config&_='+Date.now();
+    fetch(url,{credentials:'omit'}).then(function(r){return r.json()}).then(window.__saleConfig).catch(function(){
+      var s=document.createElement('script');
+      s.src=url+'&callback=__saleConfig';
+      document.head.appendChild(s);
+    });
   }
 
 })();
