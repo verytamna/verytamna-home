@@ -17,6 +17,8 @@
 
 
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<style>.ts-box:empty{display:none}.ts-box{display:flex;justify-content:center}</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -201,6 +203,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
               <span>위 개인정보 수집·이용에 동의합니다.</span>
             </label>
           </div>
+          <div id="tsNotify" class="ts-box"></div>
           <p id="notifyMsg" hidden class="text-sm text-red-600" role="alert"></p>
           <button type="button" id="btnNotify" class="amber-btn w-full h-12 rounded-xl font-bold">수확 알림 신청하기</button>
         </div>
@@ -362,6 +365,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
       </div>
 
       <p class="text-xs text-slate-500 mt-4 text-center">결제는 <b class="text-slate-700">계좌 입금</b>이에요.<br>접수하시면 입금 계좌를 바로 안내해 드려요.</p>
+      <div id="tsOrder" class="ts-box mt-3"></div>
       <p id="orderStatusMsg" class="text-sm mt-3 leading-relaxed hidden text-red-600" role="alert"></p>
 
       <!-- 접수 완료 안내 -->
@@ -463,6 +467,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
         <input id="lookupPhone" type="tel" maxlength="20" placeholder="연락처 (010-0000-0000)" class="field flex-1 min-w-0">
         <button id="btnLookup" type="button" class="shrink-0 bg-[var(--deep)] text-white font-bold px-5 rounded-xl hover:brightness-110 transition disabled:opacity-50">조회</button>
       </div>
+      <div id="tsLookup" class="ts-box mb-2"></div>
       <p id="lookupStatusMsg" class="text-xs mb-1 leading-relaxed hidden"></p>
 
       <div id="lookupResult" class="hidden mt-4 pt-4 border-t border-[var(--mid)]/10 space-y-3"></div>
@@ -585,7 +590,10 @@ function update(){
   updateSteps();
 }
 
-// ⚠️ 아래 SCRIPT_URL은 구글 앱스 스크립트 배포 URL(새 버전을 배포해도 고정)입니다.
+// 주문·알림 신청·조회는 Cloudflare 관문(봇 확인 · 접속별 한도)을 거쳐 구글 시트로 간다.
+const GATEWAY_URL = 'https://verytamna-order.verytamna-order.workers.dev';
+const TURNSTILE_SITEKEY = '0x4AAAAAAF8yb99Gz7yO3sET';
+// ⚠️ 아래 SCRIPT_URL은 구글 앱스 스크립트 배포 URL입니다. 관문이 안 될 때 판매 설정을 읽는 데만 쓴다.
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzp5qsgoKn3804tUj1UseibUvTq7EC--GxkRj1P5iojoOHgHJjsn8tJh6J9JpUlNQo/exec';
 const PAGE_LOADED_AT = Date.now();
 
@@ -641,8 +649,93 @@ function callServerByScript(query, isValid){
 }
 
 // ── 판매 설정 (구글 시트 "설정" 탭) ──
-function loadSaleConfig(){
-  return callServer({ action: 'config' }, d => typeof d.ok === 'boolean');
+function loadSaleConfig(fresh){
+  return gatewayGet('/config' + (fresh ? '?fresh=1' : ''))
+    .then(d=>{ if(d && typeof d.ok === 'boolean') return d; throw new Error('bad data'); })
+    .catch(()=>callServer({ action: 'config' }, d => typeof d.ok === 'boolean'));
+}
+
+// ── Cloudflare 관문 호출 ──
+function withTimeout(promise, ms){
+  return new Promise((resolve, reject)=>{
+    const t = setTimeout(()=>reject(new Error('timeout')), ms);
+    promise.then(v=>{ clearTimeout(t); resolve(v); }, e=>{ clearTimeout(t); reject(e); });
+  });
+}
+function gatewayGet(path){
+  return withTimeout(fetch(GATEWAY_URL + path, { credentials: 'omit' }).then(r=>r.json()), 15000);
+}
+// 응답을 못 받으면(네트워크·시간 초과) 예외. 받으면 서버의 결과 그대로.
+function gatewayPost(path, body){
+  return withTimeout(fetch(GATEWAY_URL + path, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  }).then(r=>r.json()), 40000);
+}
+
+// ── 봇 확인 (Cloudflare Turnstile) ──
+// 대부분은 화면에 아무것도 안 뜨고 자동으로 통과한다. 확인이 필요할 때만 상자가 나타난다.
+// 토큰은 한 번만 쓸 수 있어서 보낼 때마다 새로 받는다.
+// 위젯이 안 불러와지거나 실패하면(일부 인앱 브라우저 등) { widgetFailed: true }로 보낸다. 관문이 따로 세어 받는다.
+const tsWidgets = {};
+function waitForTurnstile(ms){
+  return new Promise(resolve=>{
+    const start = Date.now();
+    (function check(){
+      if(window.turnstile && window.turnstile.render) return resolve(true);
+      if(Date.now() - start > ms) return resolve(false);
+      setTimeout(check, 200);
+    })();
+  });
+}
+async function getBotCheck(action, boxId){
+  if(!(await waitForTurnstile(8000))) return { widgetFailed: true };
+  return new Promise(resolve=>{
+    let done = false, interactive = false;
+    const finish = v=>{ if(done) return; done = true; clearTimeout(timer); resolve(v); };
+    let timer = setTimeout(()=>{ if(!interactive) finish({ widgetFailed: true }); }, 20000);
+    const handlers = {
+      callback: token=>finish({ token }),
+      'error-callback': ()=>{ finish({ widgetFailed: true }); return true; },
+      'expired-callback': ()=>{},
+      'timeout-callback': ()=>finish({ widgetFailed: true }),
+      'before-interactive-callback': ()=>{
+        // 손님이 직접 확인해야 하는 경우: 상자를 보여주고 2분까지 기다린다.
+        interactive = true;
+        clearTimeout(timer);
+        timer = setTimeout(()=>finish({ widgetFailed: true }), 120000);
+        const box = document.getElementById(boxId);
+        if(box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+    try{
+      let w = tsWidgets[boxId];
+      if(w === undefined){
+        w = window.turnstile.render('#' + boxId, {
+          sitekey: TURNSTILE_SITEKEY,
+          action,
+          execution: 'execute',
+          appearance: 'interaction-only',
+          language: 'ko',
+          'refresh-expired': 'manual',
+          callback: t=>tsWidgets[boxId + ':h'].callback(t),
+          'error-callback': e=>tsWidgets[boxId + ':h']['error-callback'](e),
+          'expired-callback': ()=>tsWidgets[boxId + ':h']['expired-callback'](),
+          'timeout-callback': ()=>tsWidgets[boxId + ':h']['timeout-callback'](),
+          'before-interactive-callback': ()=>tsWidgets[boxId + ':h']['before-interactive-callback']()
+        });
+        tsWidgets[boxId] = w;
+      } else {
+        window.turnstile.reset(w);
+      }
+      tsWidgets[boxId + ':h'] = handlers;
+      window.turnstile.execute(w);
+    }catch(e){
+      finish({ widgetFailed: true });
+    }
+  });
 }
 
 const HERO_OPEN = { title: document.getElementById('heroTitle').innerHTML, sub: document.getElementById('heroSub').textContent };
@@ -723,12 +816,13 @@ document.getElementById('btnNotify').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnNotify');
   btn.disabled = true;
   try{
-    await fetch(SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ type: 'notify', name, phone, hp: document.getElementById('hpField').value, formTime: Date.now() - PAGE_LOADED_AT })
-    });
+    const bot = await getBotCheck('notify', 'tsNotify');
+    const d = await gatewayPost('/notify', { name, phone, hp: document.getElementById('hpField').value, formTime: Date.now() - PAGE_LOADED_AT, ...bot });
+    if(d.result !== 'success'){
+      return fail(d.message === 'limit' ? '신청이 잠시 몰렸어요. 잠시 후 다시 눌러주세요.'
+        : d.message === 'bot' ? '확인이 만료됐어요. 한 번만 더 눌러주세요.'
+        : '신청 중 문제가 발생했어요. 전화로 문의 부탁드려요.');
+    }
     document.getElementById('notifyForm').hidden = true;
     document.getElementById('notifyDone').hidden = false;
   }catch(e){
@@ -771,19 +865,8 @@ function newOrderId(){
 }
 let currentOrderId = newOrderId();
 
-const sleep = ms => new Promise(r=>setTimeout(r, ms));
-// 제출 뒤 서버에 "이 접수번호가 시트에 들어갔는지" 묻는다. 들어갔으면 {found:true}, 거절됐으면 {error}, 모르면 null.
-async function waitForReceipt(id){
-  for(const wait of [1500, 2500, 4000, 6000]){
-    await sleep(wait);
-    try{
-      const d = await callServer({ action: 'receipt', id }, d => typeof d.found === 'boolean');
-      if(d.found || d.error) return d;
-    }catch(e){}
-  }
-  return null;
-}
 const REJECT_MESSAGES = {
+  'bot': '자동 입력 확인이 만료됐어요. 제출 버튼을 한 번만 더 눌러주세요.',
   'closed': '지금은 주문을 받지 않고 있어요. 화면을 새로고침해 주세요.',
   'sold out': '담으신 등급이 방금 품절됐어요. 화면을 새로고침해 주세요.',
   'limit': '주문이 잠시 몰려 접수되지 않았어요. 잠시 후 다시 제출하시거나 전화로 주문해 주세요.',
@@ -833,10 +916,9 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
   label.textContent = '접수 중...';
 
   try{
-    // 주문서를 연 뒤 시트 설정이 바뀌었을 수 있으니 제출 직전에 다시 확인한다.
-    // no-cors라 서버의 거절 응답을 읽을 수 없으므로, 여기서 걸러야 잘못된 접수 안내가 나가지 않는다.
+    // 주문서를 연 뒤 시트 설정이 바뀌었을 수 있으니 제출 직전에 다시 확인한다(관문의 60초 기억을 건너뜀).
     label.textContent = '확인 중...';
-    const latest = await loadSaleConfig();
+    const latest = await loadSaleConfig(true);
     if(!latest || !latest.ok) throw new Error('config');
     if(!latest.open){
       label.textContent = '주문서 제출하기';
@@ -856,28 +938,26 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
     }
     label.textContent = '접수 중...';
 
-    // Apps Script(/exec)는 응답을 content.googleusercontent.com으로 리다이렉트하는데,
-    // 일부 모바일 인앱 브라우저(카카오톡·네이버 등)는 이 리다이렉트 응답을 읽지 못한다.
-    // 그래서 no-cors로 보내고, 접수 여부는 접수번호로 따로 물어 확인한다.
+    // 관문(Cloudflare)이 봇 확인 후 구글 시트에 넘기고, 접수 결과를 바로 돌려준다.
+    // 접수번호: 응답을 못 받아 다시 제출해도 시트에는 한 번만 들어간다.
+    label.textContent = '확인 중...';
+    const bot = await getBotCheck('order', 'tsOrder');
+    label.textContent = '접수 중...';
     order.orderId = currentOrderId;
+    let res;
     try{
-      await fetch(SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(order)
-      });
-    }catch(e){}
-    label.textContent = '접수 확인 중...';
-    const receipt = await waitForReceipt(order.orderId);
-    if(!receipt || !receipt.found){
+      res = await gatewayPost('/order', { ...order, ...bot });
+    }catch(e){
       label.textContent = '주문서 제출하기';
-      const reason = receipt && receipt.error;
-      // 거절이 확정됐으면 다음 제출은 새 접수번호로 한다. 결과를 모를 때만 같은 번호를 유지해 중복 접수를 막는다.
-      if(reason) currentOrderId = newOrderId();
+      return showStatus('접수 확인이 늦어지고 있어요. 다시 제출하셔도 중복 접수되지 않아요. 계속 안 되면 전화(010-2560-6099)로 주문해 주세요.');
+    }
+    if(!res || res.result !== 'success'){
+      label.textContent = '주문서 제출하기';
+      const reason = res && res.message;
+      // 거절이 확정됐으면 다음 제출은 새 접수번호로 한다. (서버가 바빴을 때만 같은 번호 유지)
+      if(reason && reason !== 'busy') currentOrderId = newOrderId();
       return showStatus(REJECT_MESSAGES[reason] ||
-        (reason ? '입력하신 내용으로는 접수되지 않았어요. 성함·연락처·주소를 확인해 주세요.'
-                : '접수 확인이 늦어지고 있어요. 다시 제출하셔도 중복 접수되지 않아요. 계속 안 되면 전화로 문의해 주세요.'));
+        '입력하신 내용으로는 접수되지 않았어요. 성함·연락처·주소를 확인해 주세요. 계속 안 되면 전화(010-2560-6099)로 주문해 주세요.');
     }
     currentOrderId = newOrderId();
     label.textContent = '접수 완료!';
@@ -947,8 +1027,11 @@ document.getElementById('btnLookup').addEventListener('click', async ()=>{
   btn.textContent = '조회 중...';
 
   try{
-    const data = await callServer({ action: 'lookup', phone, name }, d => typeof d.result === 'string');
-    if(data.result === 'error' && data.message === 'limit'){
+    const bot = await getBotCheck('lookup', 'tsLookup');
+    const data = await gatewayPost('/lookup', { phone, name, ...bot });
+    if(data.result === 'error' && data.message === 'bot'){
+      showLookupStatus('확인이 만료됐어요. 조회를 한 번만 더 눌러주세요.', false);
+    } else if(data.result === 'error' && data.message === 'limit'){
       showLookupStatus('조회가 너무 많아요. 잠시 후 다시 시도해주세요.', false);
     } else if(data.result === 'success' && data.found && data.orders && data.orders.length){
       lookupStatusMsg.classList.add('hidden');
