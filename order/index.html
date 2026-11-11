@@ -353,6 +353,14 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
         </label>
       </div>
 
+      <div class="mt-3 rounded-xl border border-[var(--mid)]/15 p-3.5 text-xs text-slate-600 leading-relaxed">
+        <label class="flex items-start gap-2 cursor-pointer">
+          <input type="checkbox" id="agreeMarketing" class="mt-0.5 shrink-0 w-4 h-4">
+          <span>다음 수확철 <b>판매 시작 안내 문자</b>를 받겠습니다. <span class="text-slate-400">(선택)</span></span>
+        </label>
+        <p class="mt-1.5 pl-6 text-slate-500">성함·연락처를 판매 시작 안내에만 쓰고, 수신을 거부하실 때까지 보관해요. 체크하지 않아도 주문할 수 있어요.</p>
+      </div>
+
       <p class="text-xs text-slate-500 mt-4 text-center">결제는 <b class="text-slate-700">계좌 입금</b>이에요.<br>접수하시면 입금 계좌를 바로 안내해 드려요.</p>
       <p id="orderStatusMsg" class="text-sm mt-3 leading-relaxed hidden text-red-600" role="alert"></p>
 
@@ -740,6 +748,7 @@ function buildOrderData(){
     phone: document.getElementById('userPhone').value.trim(),
     address: document.getElementById('userAddress').value.trim(),
     memo: document.getElementById('userMemo').value.trim().slice(0, 300),
+    marketing: document.getElementById('agreeMarketing').checked,
     hp: document.getElementById('hpField').value,
     formTime: Date.now() - PAGE_LOADED_AT
   };
@@ -825,6 +834,7 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
     slip.scrollIntoView({ behavior: 'smooth', block: 'center' });
     ['userName','userPhone','userAddress','userMemo'].forEach(id=>{ document.getElementById(id).value=''; });
     document.getElementById('agreePrivacy').checked = false;
+    document.getElementById('agreeMarketing').checked = false;
     Object.keys(cartQty).forEach(k=>cartQty[k]=0);
     document.querySelectorAll('#productCards .product-card').forEach(card=>{
       card.querySelector('.qtyVal').textContent = '0';
