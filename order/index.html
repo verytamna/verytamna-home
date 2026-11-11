@@ -190,7 +190,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
         <div id="notifyForm" class="space-y-3">
           <div class="grid sm:grid-cols-2 gap-3">
             <div><label class="label" for="notifyName">성함</label><input id="notifyName" type="text" autocomplete="name" maxlength="40" class="field"></div>
-            <div><label class="label" for="notifyPhone">연락처</label><input id="notifyPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" class="field"></div>
+            <div><label class="label" for="notifyPhone">연락처</label><input id="notifyPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="010-0000-0000" class="field"></div>
           </div>
           <div class="rounded-xl border border-[var(--mid)]/15 bg-[var(--mist)] p-3.5 text-xs text-slate-600 leading-relaxed">
             <p>· <b>수집 항목</b> : 성함, 연락처 · <b>이용 목적</b> : 판매 시작 안내 문자 발송</p>
@@ -315,15 +315,15 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
       <div class="space-y-4">
         <div>
           <label class="label" for="userName">성함</label>
-          <input id="userName" type="text" autocomplete="name" placeholder="주문자 성함" class="field">
+          <input id="userName" type="text" autocomplete="name" maxlength="40" placeholder="주문자 성함" class="field">
         </div>
         <div>
           <label class="label" for="userPhone">연락처</label>
-          <input id="userPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" class="field">
+          <input id="userPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="010-0000-0000" class="field">
         </div>
         <div>
           <label class="label" for="userAddress">배송(또는 방문) 주소</label>
-          <input id="userAddress" type="text" autocomplete="street-address" placeholder="받으실 주소" class="field">
+          <input id="userAddress" type="text" autocomplete="street-address" maxlength="200" placeholder="받으실 주소" class="field">
         </div>
         <div>
           <label class="label" for="userMemo">메모 <span class="text-slate-400 font-normal">(선택)</span></label>
@@ -454,12 +454,13 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
   <main class="max-w-md mx-auto px-4 sm:px-5 py-10 sm:py-14">
     <div class="text-center mb-6">
       <h2 class="font-display text-3xl text-[var(--deep)] mb-2">주문조회</h2>
-      <p class="text-sm text-slate-500">조회번호는 귀하의 전화번호입니다.<br>주문하실 때 입력하신 연락처를 입력해주세요.</p>
+      <p class="text-sm text-slate-500">주문하실 때 입력하신<br>성함과 연락처를 입력해주세요.</p>
     </div>
 
     <div class="card p-6 sm:p-8">
+      <input id="lookupName" type="text" autocomplete="name" maxlength="40" placeholder="성함" class="field mb-2">
       <div class="flex gap-2 mb-2">
-        <input id="lookupPhone" type="tel" placeholder="연락처 (010-0000-0000)" class="field flex-1 min-w-0">
+        <input id="lookupPhone" type="tel" maxlength="20" placeholder="연락처 (010-0000-0000)" class="field flex-1 min-w-0">
         <button id="btnLookup" type="button" class="shrink-0 bg-[var(--deep)] text-white font-bold px-5 rounded-xl hover:brightness-110 transition disabled:opacity-50">조회</button>
       </div>
       <p id="lookupStatusMsg" class="text-xs mb-1 leading-relaxed hidden"></p>
@@ -588,37 +589,38 @@ function update(){
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzp5qsgoKn3804tUj1UseibUvTq7EC--GxkRj1P5iojoOHgHJjsn8tJh6J9JpUlNQo/exec';
 const PAGE_LOADED_AT = Date.now();
 
-// ── 판매 설정 (구글 시트 "설정" 탭) ──
+// ── 서버(Apps Script) 읽기 요청 ──
 // 두 방법으로 동시에 요청해 먼저 온 값을 쓴다.
-// <script> 태그는 구글 로그인 쿠키가 함께 가서 로그인된 브라우저에서 실패할 수 있고,
+// <script> 태그(JSONP)는 구글 로그인 쿠키가 함께 가서 로그인된 브라우저에서 실패할 수 있고,
 // fetch는 쿠키 없이 가지만 일부 인앱 브라우저에서 리다이렉트 응답을 읽지 못한다.
-function loadSaleConfig(){
+function callServer(params, isValid){
+  const query = Object.keys(params).map(k=>encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
   return new Promise((resolve, reject)=>{
     const errors = [];
     const fail = name => e => {
       errors.push(name + ':' + ((e && e.message) || e));
       if(errors.length === 2) reject(new Error(errors.join(' / ')));
     };
-    loadSaleConfigByFetch().then(resolve, fail('f'));
-    loadSaleConfigByScript().then(resolve, fail('s'));
+    callServerByFetch(query, isValid).then(resolve, fail('f'));
+    callServerByScript(query, isValid).then(resolve, fail('s'));
   });
 }
-function loadSaleConfigByFetch(){
+function callServerByFetch(query, isValid){
   return new Promise((resolve, reject)=>{
     const timer = setTimeout(()=>reject(new Error('timeout')), 20000);
-    fetch(SCRIPT_URL + '?action=config&_=' + Date.now(), { credentials: 'omit' })
+    fetch(SCRIPT_URL + '?' + query + '&_=' + Date.now(), { credentials: 'omit' })
       .then(r=>r.json())
       .then(d=>{
         clearTimeout(timer);
-        if(d && typeof d.ok === 'boolean') resolve(d);
+        if(d && isValid(d)) resolve(d);
         else reject(new Error('bad data'));
       })
       .catch(e=>{ clearTimeout(timer); reject(e); });
   });
 }
-function loadSaleConfigByScript(){
+function callServerByScript(query, isValid){
   return new Promise((resolve, reject)=>{
-    const cb = '__saleConfig' + Date.now() + Math.floor(Math.random()*10000);
+    const cb = '__srv' + Date.now() + Math.floor(Math.random()*100000);
     const s = document.createElement('script');
     let done = false;
     const finish = (fn, v)=>{
@@ -630,12 +632,17 @@ function loadSaleConfigByScript(){
       fn(v);
     };
     const timer = setTimeout(()=>finish(reject, new Error('timeout')), 20000);
-    window[cb] = d => finish(resolve, d);
+    window[cb] = d => (d && isValid(d)) ? finish(resolve, d) : finish(reject, new Error('bad data'));
     s.onerror = ()=>finish(reject, new Error('load failed'));
     s.onload = ()=>setTimeout(()=>finish(reject, new Error('no data')), 0);
-    s.src = SCRIPT_URL + '?action=config&callback=' + cb + '&_=' + Date.now();
+    s.src = SCRIPT_URL + '?' + query + '&callback=' + cb + '&_=' + Date.now();
     document.head.appendChild(s);
   });
+}
+
+// ── 판매 설정 (구글 시트 "설정" 탭) ──
+function loadSaleConfig(){
+  return callServer({ action: 'config' }, d => typeof d.ok === 'boolean');
 }
 
 const HERO_OPEN = { title: document.getElementById('heroTitle').innerHTML, sub: document.getElementById('heroSub').textContent };
@@ -710,7 +717,8 @@ document.getElementById('btnNotify').addEventListener('click', async ()=>{
   const fail = t=>{ msg.textContent = t; msg.hidden = false; };
   msg.hidden = true;
   if(!name) return fail('성함을 입력해주세요.');
-  if(phone.replace(/\D/g,'').length < 9) return fail('연락처를 정확히 입력해주세요.');
+  const digits = phone.replace(/\D/g,'').length;
+  if(digits < 9 || digits > 15) return fail('연락처를 하나만 정확히 입력해주세요.');
   if(!document.getElementById('notifyAgree').checked) return fail('개인정보 수집·이용에 동의해주세요.');
   const btn = document.getElementById('btnNotify');
   btn.disabled = true;
@@ -749,10 +757,38 @@ function buildOrderData(){
     address: document.getElementById('userAddress').value.trim(),
     memo: document.getElementById('userMemo').value.trim().slice(0, 300),
     marketing: document.getElementById('agreeMarketing').checked,
+    orderId: currentOrderId,
     hp: document.getElementById('hpField').value,
     formTime: Date.now() - PAGE_LOADED_AT
   };
 }
+
+// 접수번호: 같은 주문을 다시 제출해도 시트에 한 번만 들어가고, 제출 뒤 실제로 들어갔는지 확인하는 데 쓴다.
+function newOrderId(){
+  const a = new Uint8Array(12);
+  (window.crypto || window.msCrypto).getRandomValues(a);
+  return Array.from(a, b=>('0' + b.toString(16)).slice(-2)).join('');
+}
+let currentOrderId = newOrderId();
+
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+// 제출 뒤 서버에 "이 접수번호가 시트에 들어갔는지" 묻는다. 들어갔으면 {found:true}, 거절됐으면 {error}, 모르면 null.
+async function waitForReceipt(id){
+  for(const wait of [1500, 2500, 4000, 6000]){
+    await sleep(wait);
+    try{
+      const d = await callServer({ action: 'receipt', id }, d => typeof d.found === 'boolean');
+      if(d.found || d.error) return d;
+    }catch(e){}
+  }
+  return null;
+}
+const REJECT_MESSAGES = {
+  'closed': '지금은 주문을 받지 않고 있어요. 화면을 새로고침해 주세요.',
+  'sold out': '담으신 등급이 방금 품절됐어요. 화면을 새로고침해 주세요.',
+  'limit': '주문이 잠시 몰려 접수되지 않았어요. 잠시 후 다시 제출하시거나 전화로 주문해 주세요.',
+  'busy': '주문이 잠시 몰려 접수되지 않았어요. 잠시 후 다시 제출하시거나 전화로 주문해 주세요.'
+};
 
 const statusMsg = document.getElementById('orderStatusMsg');
 function showStatus(t){ statusMsg.textContent = t; statusMsg.classList.remove('hidden'); }
@@ -785,7 +821,10 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
   if(order.totalQty === 0) return showStatus('상품을 1개 이상 담아주세요.');
   if(!order.deliveryMethod) return showStatus('수령 방법(방문/택배)을 선택해주세요.');
   if(!order.name || !order.phone || !order.address) return showStatus('성함, 연락처, 주소를 모두 입력해주세요.');
-  if(order.phone.replace(/\D/g,'').length < 9) return showStatus('연락처를 정확히 입력해주세요.');
+  const phoneDigits = order.phone.replace(/\D/g,'').length;
+  if(phoneDigits < 9 || phoneDigits > 15) return showStatus('연락처를 하나만 정확히 입력해주세요.');
+  if(order.name.length > 40) return showStatus('성함은 40자 이내로 입력해주세요.');
+  if(order.address.length > 200) return showStatus('주소는 200자 이내로 입력해주세요.');
   if(!document.getElementById('agreePrivacy').checked) return showStatus('개인정보 수집·이용에 동의해주세요.');
 
   const btn = document.getElementById('btnSubmitOrder');
@@ -818,15 +857,27 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
     label.textContent = '접수 중...';
 
     // Apps Script(/exec)는 응답을 content.googleusercontent.com으로 리다이렉트하는데,
-    // 일부 모바일 인앱 브라우저(카카오톡·네이버 등)는 이 리다이렉트 응답을 읽지 못해
-    // res.json()에서 실패한다. doPost는 리다이렉트 이전에 이미 시트에 기록을 마치므로,
-    // no-cors로 보내 응답 내용을 확인하지 않고 "네트워크 오류 없이 전송됨"만으로 성공 처리한다.
-    await fetch(SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(order)
-    });
+    // 일부 모바일 인앱 브라우저(카카오톡·네이버 등)는 이 리다이렉트 응답을 읽지 못한다.
+    // 그래서 no-cors로 보내고, 접수 여부는 접수번호로 따로 물어 확인한다.
+    order.orderId = currentOrderId;
+    try{
+      await fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(order)
+      });
+    }catch(e){}
+    label.textContent = '접수 확인 중...';
+    const receipt = await waitForReceipt(order.orderId);
+    if(!receipt || !receipt.found){
+      label.textContent = '주문서 제출하기';
+      const reason = receipt && receipt.error;
+      return showStatus(REJECT_MESSAGES[reason] ||
+        (reason ? '입력하신 내용으로는 접수되지 않았어요. 성함·연락처·주소를 확인해 주세요.'
+                : '접수 확인이 늦어지고 있어요. 다시 제출하셔도 중복 접수되지 않아요. 계속 안 되면 전화로 문의해 주세요.'));
+    }
+    currentOrderId = newOrderId();
     label.textContent = '접수 완료!';
     document.getElementById('payAmount').textContent = Number(order.total).toLocaleString() + '원';
     const slip = document.getElementById('paySlip');
@@ -877,14 +928,14 @@ function renderOrderCard(o){
   </div>`;
 }
 document.getElementById('btnLookup').addEventListener('click', async ()=>{
-  const input = document.getElementById('lookupPhone');
-  const phone = input.value.trim();
+  const phone = document.getElementById('lookupPhone').value.trim();
+  const name = document.getElementById('lookupName').value.trim();
   const resultBox = document.getElementById('lookupResult');
   resultBox.classList.add('hidden');
   resultBox.innerHTML = '';
 
-  if(!phone){
-    showLookupStatus('연락처를 입력해주세요.', false);
+  if(!name || !phone){
+    showLookupStatus('성함과 연락처를 모두 입력해주세요.', false);
     return;
   }
 
@@ -894,14 +945,15 @@ document.getElementById('btnLookup').addEventListener('click', async ()=>{
   btn.textContent = '조회 중...';
 
   try{
-    const res = await fetch(`${SCRIPT_URL}?action=lookup&phone=${encodeURIComponent(phone)}`);
-    const data = await res.json();
-    if(data.result === 'success' && data.found && data.orders && data.orders.length){
+    const data = await callServer({ action: 'lookup', phone, name }, d => typeof d.result === 'string');
+    if(data.result === 'error' && data.message === 'limit'){
+      showLookupStatus('조회가 너무 많아요. 잠시 후 다시 시도해주세요.', false);
+    } else if(data.result === 'success' && data.found && data.orders && data.orders.length){
       lookupStatusMsg.classList.add('hidden');
       resultBox.innerHTML = data.orders.map(renderOrderCard).join('');
       resultBox.classList.remove('hidden');
     } else {
-      showLookupStatus('일치하는 주문을 찾을 수 없어요. 연락처를 다시 확인해주세요.', false);
+      showLookupStatus('일치하는 주문을 찾을 수 없어요. 성함과 연락처를 다시 확인해주세요.', false);
     }
   }catch(e){
     showLookupStatus('조회 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.', false);
