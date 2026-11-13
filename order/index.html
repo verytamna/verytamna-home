@@ -101,6 +101,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--mist);color:#211E33;
   border-top:1px solid rgba(255,255,255,.12);
   padding-bottom:env(safe-area-inset-bottom);
 }
+/* 버튼을 빠르게 두 번 눌러도 화면이 확대되지 않게(두 손가락 확대는 그대로) */
+button,a,label,input,select,textarea{touch-action:manipulation;}
 .amber-btn{background:linear-gradient(180deg,#F2B85E,#E8A94B);color:#231F3D;
   box-shadow:0 10px 26px -8px rgba(232,169,75,.55);transition:filter .2s ease,transform .2s ease;}
 .amber-btn:hover{filter:brightness(1.05);}
