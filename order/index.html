@@ -332,8 +332,19 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
           <input id="userPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="010-0000-0000" class="field">
         </div>
         <div>
-          <label class="label" for="userAddress">배송(또는 방문) 주소</label>
-          <input id="userAddress" type="text" autocomplete="street-address" maxlength="200" placeholder="받으실 주소" class="field">
+          <label class="label" for="addrRoad">배송(또는 방문) 주소</label>
+          <div class="flex gap-2 mb-2">
+            <input id="addrZip" type="text" readonly tabindex="-1" placeholder="우편번호" aria-label="우편번호" class="field w-28 shrink-0 bg-slate-50">
+            <button type="button" id="btnAddrSearch" class="flex-1 rounded-xl font-bold bg-[var(--deep)] text-white hover:brightness-110 transition"><i class="fa-solid fa-magnifying-glass text-xs mr-1"></i>주소 검색</button>
+          </div>
+          <input id="addrRoad" type="text" readonly maxlength="150" placeholder="주소 검색을 눌러 주소를 골라 주세요" class="field mb-2 bg-slate-50">
+          <input id="userAddress" type="text" autocomplete="address-line2" maxlength="80" placeholder="상세주소 (동·호수 등, 없으면 비워 두세요)" class="field">
+          <button type="button" id="btnAddrManual" class="mt-1.5 text-xs text-slate-500 underline">주소 검색이 안 되면 직접 입력하기</button>
+          <div id="addrPanel" hidden class="mt-2 rounded-xl border border-[var(--mid)]/20 overflow-hidden">
+            <div class="flex items-center justify-between px-3 py-2 bg-[var(--mist)] text-sm font-bold text-[var(--deep)]">
+              <span>주소 검색</span><button type="button" id="btnAddrClose" class="text-slate-500 text-xs font-normal">닫기</button>
+            </div>
+          </div>
         </div>
         <div>
           <label class="label" for="userMemo">메모 <span class="text-slate-400 font-normal">(선택)</span></label>
@@ -354,6 +365,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
             <p>· <b>이용 목적</b> : 주문 확인 및 상품 배송, 배송 관련 안내</p>
             <p>· <b>보유·이용 기간</b> : 주소·요청사항은 주문 후 1년, 성함·연락처·주문내역(송장번호 포함)은 주문 확인·교환·환불 등 분쟁 대응을 위해 5년 보관 후 지체 없이 파기 (이후에는 개인을 알아볼 수 없는 판매 통계(날짜·상품·수량·금액)만 남김)</p>
             <p>· <b>처리 위탁</b> : 택배 배송을 위해 우체국(우정사업본부)에 성함·연락처·주소를 제공합니다.</p>
+            <p>· 주소 검색은 카카오 우편번호 서비스를 이용하며, 검색창에 입력하신 주소만 카카오로 전달됩니다.</p>
             <p>· 동의를 거부하실 수 있으나, 미동의 시 주문 접수가 불가합니다.</p>
             <p>· 문의 : 010-2560-6099</p>
           </div>
@@ -564,7 +576,68 @@ document.querySelectorAll('#productCards .product-card').forEach(card=>{
 document.querySelectorAll('.delivery-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{ deliveryMethod = btn.dataset.method; update(); });
 });
-['userName','userPhone','userAddress'].forEach(id=>document.getElementById(id).addEventListener('input', updateSteps));
+['userName','userPhone','userAddress','addrRoad'].forEach(id=>document.getElementById(id).addEventListener('input', updateSteps));
+
+// ── 주소 검색 ──
+// 카카오(다음) 우편번호 검색은 관문(workers.dev, 다른 출처)의 /addr 페이지에서만 불러오고, 그 페이지를 iframe으로 띄운다.
+// 출처가 달라서 그 페이지는 이 주문서의 입력값·계좌 정보에 접근할 수 없고, 고른 우편번호·도로명주소만 postMessage로 보내 온다.
+// (GATEWAY_URL은 아래에서 정의되므로 출처는 쓸 때 계산한다)
+let addrFrame = null;
+function closeAddrPanel(){
+  const panel = document.getElementById('addrPanel');
+  panel.hidden = true;
+  if(addrFrame){ addrFrame.remove(); addrFrame = null; }
+}
+document.getElementById('btnAddrSearch').addEventListener('click', ()=>{
+  const panel = document.getElementById('addrPanel');
+  if(addrFrame){ closeAddrPanel(); return; }
+  addrFrame = document.createElement('iframe');
+  addrFrame.src = GATEWAY_URL + '/addr';
+  addrFrame.title = '주소 검색';
+  addrFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+  addrFrame.setAttribute('referrerpolicy', 'no-referrer');
+  addrFrame.style.cssText = 'width:100%;height:460px;border:0;display:block';
+  panel.appendChild(addrFrame);
+  panel.hidden = false;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.getElementById('btnAddrClose').addEventListener('click', closeAddrPanel);
+document.getElementById('btnAddrManual').addEventListener('click', ()=>{
+  closeAddrPanel();
+  const road = document.getElementById('addrRoad');
+  document.getElementById('addrZip').value = '';
+  road.readOnly = false;
+  road.classList.remove('bg-slate-50');
+  road.placeholder = '받으실 주소';
+  road.focus();
+});
+window.addEventListener('message', e=>{
+  if(!addrFrame || e.source !== addrFrame.contentWindow || e.origin !== new URL(GATEWAY_URL).origin) return;
+  const d = e.data;
+  if(!d || typeof d !== 'object') return;
+  if(d.type === 'verytamna-addr-error'){ document.getElementById('btnAddrManual').click(); return; }
+  if(d.type !== 'verytamna-addr') return;
+  const zip = typeof d.zonecode === 'string' ? d.zonecode : '';
+  const road = typeof d.road === 'string' ? d.road.replace(/[\u0000-\u001F|]/g, ' ').trim() : '';
+  if(!/^\d{5}$/.test(zip) || !road || road.length > 150) return;
+  document.getElementById('addrZip').value = zip;
+  const roadEl = document.getElementById('addrRoad');
+  roadEl.value = road;
+  roadEl.readOnly = true;
+  roadEl.classList.add('bg-slate-50');
+  closeAddrPanel();
+  updateSteps();
+  document.getElementById('userAddress').focus();
+});
+// 시트에 저장하는 주소: 검색으로 고르면 "[우편번호] 도로명주소 | 상세주소", 직접 입력이면 "주소 상세주소"
+function composeAddress(){
+  const zip = document.getElementById('addrZip').value.trim();
+  const road = document.getElementById('addrRoad').value.replace(/\|/g, ' ').trim();
+  const detail = document.getElementById('userAddress').value.replace(/\|/g, ' ').trim();
+  if(!road) return '';
+  if(/^\d{5}$/.test(zip)) return '[' + zip + '] ' + road + ' | ' + (detail || '.');
+  return (road + ' ' + detail).trim();
+}
 
 function setStep(n, state){
   const li = document.querySelector('.step[data-step="'+n+'"]');
@@ -574,7 +647,7 @@ function setStep(n, state){
 }
 function updateSteps(){
   const s1 = getTotalQty() > 0, s2 = deliveryMethod !== null;
-  const s3 = document.getElementById('userName').value.trim() && document.getElementById('userPhone').value.trim() && document.getElementById('userAddress').value.trim();
+  const s3 = document.getElementById('userName').value.trim() && document.getElementById('userPhone').value.trim() && document.getElementById('addrRoad').value.trim();
   const done = [s1, s2, !!s3];
   let activeSet = false;
   done.forEach((d,i)=>{
@@ -875,7 +948,7 @@ function buildOrderData(){
     total: subtotal + shipping,
     name: document.getElementById('userName').value.trim(),
     phone: document.getElementById('userPhone').value.trim(),
-    address: document.getElementById('userAddress').value.trim(),
+    address: composeAddress(),
     memo: document.getElementById('userMemo').value.trim().slice(0, 300),
     marketing: document.getElementById('agreeMarketing').checked,
     orderId: currentOrderId,
@@ -908,7 +981,7 @@ async function takeOrderBot(){
   }
   return getBotCheck('order', 'tsOrder');
 }
-['userName', 'userPhone', 'userAddress'].forEach(id=>{
+['userName', 'userPhone', 'userAddress', 'btnAddrSearch'].forEach(id=>{
   document.getElementById(id).addEventListener('focus', prefetchOrderBot);
 });
 
@@ -1011,7 +1084,7 @@ document.getElementById('btnSubmitOrder').addEventListener('click', async ()=>{
     document.getElementById('doneAmount').textContent = payText;
     document.getElementById('doneModal').hidden = false;
     document.getElementById('btnDoneClose').focus();
-    ['userName','userPhone','userAddress','userMemo'].forEach(id=>{ document.getElementById(id).value=''; });
+    ['userName','userPhone','userAddress','userMemo','addrZip','addrRoad'].forEach(id=>{ document.getElementById(id).value=''; });
     document.getElementById('agreePrivacy').checked = false;
     document.getElementById('agreeMarketing').checked = false;
     Object.keys(cartQty).forEach(k=>cartQty[k]=0);
